@@ -14,8 +14,6 @@ import multiprocessing
 import cv2
 import numpy as np
 from numpy.linalg import inv
-import matplotlib.cm
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # ROS module
@@ -223,15 +221,10 @@ def callback(velodyne, yolo, image, image_pub=None):
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>10),axis=1)
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1) #Ground Filter
-    # print(len(xyz_p[0]), len(xyz_p[1]), len(xyz_p[2]), len(xyz_p[3]))
-    # print(len(filtered_xyz_p[0]), len(filtered_xyz_p[1]), len(filtered_xyz_p[2]))
 
     xyz_c = transformLiDARToCamera(TransformMat, xyz_p)
-    # print(len(xyz_c[0]), len(xyz_c[1]), len(xyz_c[2]))
     xy_i, filtered_xyz_c, filtered_xyz_p = transformCameraToImage(width, height, CameraMat, xyz_c, filtered_xyz_p)
-    # print(len(xy_i[0]), len(xy_i[1]), len(xy_i[2]))
-    # print(len(filtered_xyz_c[0]), len(filtered_xyz_c[1]), len(filtered_xyz_c[2]))
-    # print(len(filtered_xyz_p[0]), len(filtered_xyz_p[1]), len(filtered_xyz_p[2]))
+
     mat_xyz_p = filtered_xyz_p.T
     mat_xyz_c = filtered_xyz_c.T
     mat_xy_i = xy_i.T
@@ -288,8 +281,7 @@ if __name__ == '__main__':
     # YOLO, LiDAR Topic name
     velodyne_points = '/velodyne_points'
     yolo_bbox = '/sign_bbox'
-    # image_color = '/usb_cam/image_raw'
-    image_color = '/usb_cam/image_refine'
+    image_color = '/usb_cam/image_raw'
 
     # Start subscriber
     listener(image_color, velodyne_points, yolo_bbox)

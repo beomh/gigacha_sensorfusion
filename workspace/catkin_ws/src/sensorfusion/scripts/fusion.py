@@ -6,6 +6,7 @@ from __future__ import print_function
 
 # Built-in modules
 import os
+import sys
 import math
 import time
 import multiprocessing
@@ -52,13 +53,16 @@ params_cam = {
     "ROLL": 0.0
 }
 
+real_K_MAT = [490.0542667650563, 0.0, 317.3826837893605, 0.0, 491.0918311743009, 256.63115327011445, 0.0, 0.0, 1.0]
+
 # Global variables
 # PAUSE = False
 # FIRST_TIME = True
 # KEY_LOCK = threading.Lock()
+IS_VIS = sys.argv
 TF_BUFFER = None
 TF_LISTENER = None
-# CV_BRIDGE = CvBridge()
+CV_BRIDGE = CvBridge()
 CAMERA_MODEL = image_geometry.PinholeCameraModel()
 
 def getRotMat(RPY):
@@ -78,7 +82,6 @@ def getRotMat(RPY):
 
 def getTransformMat(params_lidar, params_cam):
     #With Respect to Vehicle ISO Coordinate
-    #camRPY = np.array([-90*math.pi/180,0,(-90+8.5)*math.pi/180])
     lidarPosition = np.array([params_lidar.get(i) for i in (["X","Y","Z"])])
     camPosition = np.array([params_cam.get(i) for i in (["X","Y","Z"])])
 
@@ -86,25 +89,18 @@ def getTransformMat(params_lidar, params_cam):
     camRPY = np.array([params_cam.get(i) for i in (["ROLL","PITCH","YAW"])])
     camRPY = camRPY + np.array([-90*math.pi/180,0,-90*math.pi/180])
 
-    # lidarPositionOffset = np.array([0.0,0,0.02081])
-    # lidarPosition = lidarPosition + lidarPositionOffset
-
-    # camPositionOffset = np.array([0.1085, 0, 0])
-    # camPosition = camPosition + camPositionOffset
-
     camRot = getRotMat(camRPY)
     camTransl = np.array([camPosition])
     Tr_cam_to_vehicle = np.concatenate((camRot,camTransl.T),axis = 1)
     Tr_cam_to_vehicle = np.insert(Tr_cam_to_vehicle, 3, values=[0,0,0,1],axis = 0)
 
     lidarRot = getRotMat(lidarRPY)
-    lidarTransl = np.array([lidarPosition]) 
+    lidarTransl = np.array([lidarPosition])
     Tr_lidar_to_vehicle = np.concatenate((lidarRot,lidarTransl.T),axis = 1)
     Tr_lidar_to_vehicle = np.insert(Tr_lidar_to_vehicle, 3, values=[0,0,0,1],axis = 0)
 
     invTr = inv(Tr_cam_to_vehicle)
     Tr_lidar_to_cam = invTr.dot(Tr_lidar_to_vehicle).round(6)
-    # print(Tr_lidar_to_cam)
     return Tr_lidar_to_cam
 
 # Should modify real intrinsic matrix
@@ -114,8 +110,11 @@ def getCameraMat(params_cam):
     principalX = params_cam["WIDTH"]/2
     principalY = params_cam["HEIGHT"]/2
     CameraMat = np.array([focalLength,0.,principalX,0,focalLength,principalY,0,0,1]).reshape(3,3)
-    #print(CameraMat)
     return CameraMat
+
+def getRealCameraMat():
+    realCameraMat = np.array(real_K_MAT).reshape(3,3)
+    return realCameraMat
 
 def transformLiDARToCamera(TransformMat, pc_lidar):
     cam_temp = TransformMat.dot(pc_lidar)
@@ -148,7 +147,7 @@ def transformCameraToImage(width, height, CameraMat, pc_camera, pc_lidar):
 def draw_pts_img(img, xi, yi):
     point_np = img
     for ctr in zip(xi, yi):
-        point_np = cv2.circle(point_np, ctr, 2, (0,255,0),-1)
+        cv2.circle(point_np, ctr, 2, (0,255,0),-1)
     return point_np
 
 # average method
@@ -171,10 +170,10 @@ def calc_distance_position2(poinst):
 def callback(velodyne, yolo, image, image_pub=None):
     global CAMERA_MODEL, TF_BUFFER, TF_LISTENER
 
+    rospy.loginfo('Fusion Processing')
     # rospy.loginfo('Setting up camera model')
     # CAMERA_MODEL.fromCameraInfo(camera_info)
-    rospy.loginfo('Fusion Processing')
-
+    
     # TF listener
     TF_BUFFER = tf2_ros.Buffer()
     TF_LISTENER = tf2_ros.TransformListener(TF_BUFFER)
@@ -183,10 +182,13 @@ def callback(velodyne, yolo, image, image_pub=None):
     height = params_cam["HEIGHT"]
     TransformMat = getTransformMat(params_cam, params_lidar)
     CameraMat = getCameraMat(params_cam)
+    realCameraMat = getRealCameraMat()
 
     # image callback function
-    np_arr = np.frombuffer(image.data, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    try:
+        img = CV_BRIDGE.imgmsg_to_cv2(image, 'bgr8')
+    except CvBridgeError as e:
+        rospy.logerr("CvBridge Error: {}".format(e))
 
     # lidar callback function
     point_list = []
@@ -224,6 +226,7 @@ def callback(velodyne, yolo, image, image_pub=None):
 
     xyz_c = transformLiDARToCamera(TransformMat, xyz_p)
     xy_i, filtered_xyz_c, filtered_xyz_p = transformCameraToImage(width, height, CameraMat, xyz_c, filtered_xyz_p)
+    # xy_i, filtered_xyz_c, filtered_xyz_p = transformCameraToImage(width, height, realCameraMat, xyz_c, filtered_xyz_p)
 
     mat_xyz_p = filtered_xyz_p.T
     mat_xyz_c = filtered_xyz_c.T
@@ -246,17 +249,21 @@ def callback(velodyne, yolo, image, image_pub=None):
     xy_i = xy_i.astype(np.int32)
     projectionImage = draw_pts_img(img, xy_i[0,:], xy_i[1,:])
 
-    # cv2.imshow("LidartoCameraProjection", projectionImage)
-    # cv2.waitKey(1)
+    try:
+        if IS_VIS[1] == '--vis':
+            cv2.imshow("LidartoCameraProjection", projectionImage)
+            cv2.waitKey(1)
+    except:
+        pass
 
 # practical main function
 def listener(image_color, velodyne_points, yolo_bbox):
     # Start node
     rospy.init_node('fusion_camera_lidar', anonymous=True)
-    rospy.loginfo('Current PID: [%d]' % os.getpid())
-    rospy.loginfo('PointCloud2 topic: %s' % velodyne_points)
-    rospy.loginfo('YOLO topic: %s ' % yolo_bbox)
-    rospy.loginfo('Image topic: %s' % image_color)
+    rospy.loginfo('Current PID: [{}]'.format(os.getpid()))
+    rospy.loginfo('PointCloud2 topic: {}'.format(velodyne_points))
+    rospy.loginfo('YOLO topic: {}'.format(yolo_bbox))
+    rospy.loginfo('Image topic: {}'.format(image_color))
 
     # Subscribe to topics
     velodyne_sub = message_filters.Subscriber(velodyne_points, PointCloud2)

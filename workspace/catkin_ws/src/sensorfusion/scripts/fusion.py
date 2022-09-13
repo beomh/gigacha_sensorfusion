@@ -15,7 +15,6 @@ import multiprocessing
 import cv2
 import numpy as np
 from numpy.linalg import inv
-from mpl_toolkits.mplot3d import Axes3D
 
 # ROS module
 import rospy
@@ -24,13 +23,10 @@ import tf2_ros
 import ros_numpy
 import image_geometry
 from cv_bridge import CvBridge, CvBridgeError
-from tf.transformations import euler_from_matrix
-# from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
-from sensor_msgs.msg import PointCloud2, CompressedImage
 import sensor_msgs.point_cloud2 as pc2
-from sensor_msgs.msg import Image, CameraInfo, PointCloud2
+from sensor_msgs.msg import Image, CameraInfo, PointCloud, PointCloud2, ChannelFloat32
 from vision_msgs.msg import Detection2DArray, Detection2D
-from geometry_msgs.msg import PoseArray, Pose
+from geometry_msgs.msg import Point32
 
 params_lidar = {
     "X": 0.0, # meter
@@ -60,9 +56,9 @@ real_K_MAT = [490.0542667650563, 0.0, 317.3826837893605, 0.0, 491.0918311743009,
 # FIRST_TIME = True
 # KEY_LOCK = threading.Lock()
 IS_VIS = sys.argv
+CV_BRIDGE = CvBridge()
 TF_BUFFER = None
 TF_LISTENER = None
-CV_BRIDGE = CvBridge()
 CAMERA_MODEL = image_geometry.PinholeCameraModel()
 
 def getRotMat(RPY):
@@ -167,7 +163,7 @@ def calc_distance_position2(poinst):
 
 
 # all topics are processed in this callback function
-def callback(velodyne, yolo, image, image_pub=None):
+def callback(velodyne, yolo, image, pcd_pub=None):
     global CAMERA_MODEL, TF_BUFFER, TF_LISTENER
 
     rospy.loginfo('Fusion Processing')
@@ -207,7 +203,8 @@ def callback(velodyne, yolo, image, image_pub=None):
         right_y = center_y + (detection.bbox.size_y / 2.0)
         bbox_dict = {'center_point':[center_x, center_y],
                         'left_point':[left_x, left_y],
-                        'right_point':[right_x, right_y]
+                        'right_point':[right_x, right_y],
+                        'id':detection.results[0].id
         }
         box_list.append(bbox_dict)
 
@@ -235,16 +232,28 @@ def callback(velodyne, yolo, image, image_pub=None):
     # filtering points in bounding boxes & calculate position and distance
     dist_list = []
     position_list = []
+    pcd = PointCloud()
+    pcd.header.stamp = rospy.Time.now()
+    pcd.header.frame_id = 'map'
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
             if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]:
-                inner_3d_point.append(mat_xyz_p[k].tolist())
+                xyz_list = mat_xyz_p[k].tolist()
+                inner_3d_point.append(xyz_list)
+                tmp_pt = Point32()
+                tmp_ch = ChannelFloat32()
+                tmp_pt.x, tmp_pt.y, tmp_pt.z = xyz_list
+                tmp_ch.name = 'id'
+                tmp_ch.values.append(box['id'])
+                pcd.points.append(tmp_pt)
+                pcd.channels.append(tmp_ch)
         dist, position = calc_distance_position1(inner_3d_point)
         dist_list.append(dist)
         position_list.append(position)
-    print('distance list: ', dist_list)
-    print('position list: ', position_list)
+    # print('distance list: ', dist_list)
+    # print('position list: ', position_list)
+    pcd_pub.publish(pcd)
 
     xy_i = xy_i.astype(np.int32)
     projectionImage = draw_pts_img(img, xy_i[0,:], xy_i[1,:])
@@ -271,12 +280,12 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    obj_pub = rospy.Publisher('yolo_lidar', PoseArray, queue_size=5)
+    pcd_pub = rospy.Publisher('pcd', PointCloud, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(
         [velodyne_sub, yolo_sub, image_sub], queue_size=10, slop=0.1)
-    ats.registerCallback(callback, obj_pub)
+    ats.registerCallback(callback, pcd_pub)
 
     # Keep python from exiting until this node is stopped
     try:

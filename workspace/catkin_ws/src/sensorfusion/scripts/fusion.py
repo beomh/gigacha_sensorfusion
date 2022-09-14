@@ -24,9 +24,9 @@ import ros_numpy
 import image_geometry
 from cv_bridge import CvBridge, CvBridgeError
 import sensor_msgs.point_cloud2 as pc2
-from sensor_msgs.msg import Image, CameraInfo, PointCloud, PointCloud2, ChannelFloat32
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2, ChannelFloat32
 from vision_msgs.msg import Detection2DArray, Detection2D
-from geometry_msgs.msg import Point32
+from geometry_msgs.msg import Pose, PoseArray
 
 params_lidar = {
     "X": 0.0, # meter
@@ -232,7 +232,7 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     # filtering points in bounding boxes & calculate position and distance
     dist_list = []
     position_list = []
-    pcd = PointCloud()
+    pcd = PoseArray()
     pcd.header.stamp = rospy.Time.now()
     pcd.header.frame_id = 'map'
     for i, box in enumerate(box_list):
@@ -241,13 +241,12 @@ def callback(velodyne, yolo, image, pcd_pub=None):
             if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]:
                 xyz_list = mat_xyz_p[k].tolist()
                 inner_3d_point.append(xyz_list)
-                tmp_pt = Point32()
-                tmp_ch = ChannelFloat32()
-                tmp_pt.x, tmp_pt.y, tmp_pt.z = xyz_list
-                tmp_ch.name = 'id'
-                tmp_ch.values.append(box['id'])
-                pcd.points.append(tmp_pt)
-                pcd.channels.append(tmp_ch)
+                tmp_pt = Pose()
+                tmp_pt.orientation.x = xyz_list[0]
+                tmp_pt.orientation.y = xyz_list[1]
+                tmp_pt.orientation.z = xyz_list[2]
+                tmp_pt.orientation.w = float(box['id'])
+                pcd.poses.append(tmp_pt)
         dist, position = calc_distance_position1(inner_3d_point)
         dist_list.append(dist)
         position_list.append(position)
@@ -280,7 +279,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    pcd_pub = rospy.Publisher('pcd', PointCloud, queue_size=10)
+    pcd_pub = rospy.Publisher('pcd', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(

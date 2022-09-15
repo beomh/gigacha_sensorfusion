@@ -50,7 +50,6 @@ static const std::string OPENCV_WINDOW = "LiDAR and Camera Calibration";
 
 class ImageConverter 
 {
-
   ros::NodeHandle nh;
 
   ros::Subscriber image_sub_;
@@ -136,6 +135,7 @@ public:
       double B[4][1] = {{objectPoints[i].getX()}, {objectPoints[i].getY()}, {objectPoints[i].getZ()}, {1.0}};  // point mat
       double C[3][1];
 
+
       int A_col = sizeof(A[0]) / sizeof(double);
       int A_row = sizeof(A) / sizeof(A[0]);
       int B_col = sizeof(B[0]) / sizeof(double);
@@ -175,7 +175,7 @@ public:
 
       if (uv.x >= 0 && uv.x <= IMAGE_WIDTH && uv.y >= 0 && uv.y <= IMAGE_HEIGHT) 
       {
-        static const int RADIUS = 2;
+        static const int RADIUS = 2; 
         cv::circle(cv_ptr->image, uv, RADIUS, CV_RGB(255, 0, 0), -1); //이미지에 투영
         cout << "draw circle\n";
       }
@@ -206,8 +206,8 @@ public:
     pcl::PassThrough<pcl::PointXYZI> pass_x;
     pass_x.setInputCloud(cloud);
     pass_x.setFilterFieldName("x");
-    // pass_x.setFilterLimits(0.0, 50); // 0 to 4.5 mts limitation
-    pass_x.setFilterLimits(-50.0, 50); // 0 to 4.5 mts limitation
+    pass_x.setFilterLimits(0.0, 50); // 0 to 4.5 mts limitation
+    //pass_x.setFilterLimits(-50.0, 50); // 0 to 4.5 mts limitation
     pass_x.filter(*cloud_filtered);
 
     objectPoints.clear();

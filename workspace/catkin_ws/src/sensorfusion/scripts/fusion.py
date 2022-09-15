@@ -171,8 +171,8 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     # CAMERA_MODEL.fromCameraInfo(camera_info)
     
     # TF listener
-    TF_BUFFER = tf2_ros.Buffer()
-    TF_LISTENER = tf2_ros.TransformListener(TF_BUFFER)
+    # TF_BUFFER = tf2_ros.Buffer()
+    # TF_LISTENER = tf2_ros.TransformListener(TF_BUFFER)
 
     width = params_cam["WIDTH"]
     height = params_cam["HEIGHT"]
@@ -233,6 +233,7 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     dist_list = []
     position_list = []
     pcd = PoseArray()
+    pd_list = PoseArray()
     pcd.header.stamp = rospy.Time.now()
     pcd.header.frame_id = 'map'
     for i, box in enumerate(box_list):
@@ -250,9 +251,16 @@ def callback(velodyne, yolo, image, pcd_pub=None):
         dist, position = calc_distance_position1(inner_3d_point)
         dist_list.append(dist)
         position_list.append(position)
+        tmp_pd = Pose()
+        tmp_pd.orientation.x = position[0]
+        tmp_pd.orientation.y = position[1]
+        tmp_pd.orientation.z = position[2]
+        tmp_pd.orientation.w = dist
+        pd_list.poses.append(tmp_pd)
     # print('distance list: ', dist_list)
     # print('position list: ', position_list)
-    pcd_pub.publish(pcd)
+    # pcd_pub.publish(pcd)
+    pcd_pub.publish(pd_list)
 
     xy_i = xy_i.astype(np.int32)
     projectionImage = draw_pts_img(img, xy_i[0,:], xy_i[1,:])
@@ -279,7 +287,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    pcd_pub = rospy.Publisher('pcd', PoseArray, queue_size=10)
+    pcd_pub = rospy.Publisher('/pcd', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(

@@ -255,7 +255,7 @@ def callback(velodyne, yolo, image, pcd_pub=None):
         tmp_pd.orientation.x = position[0]
         tmp_pd.orientation.y = position[1]
         tmp_pd.orientation.z = position[2]
-        tmp_pd.orientation.w = dist
+        tmp_pd.orientation.w = float(box['id'])
         pd_list.poses.append(tmp_pd)
     # print('distance list: ', dist_list)
     # print('position list: ', position_list)

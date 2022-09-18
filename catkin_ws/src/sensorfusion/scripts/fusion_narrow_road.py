@@ -274,7 +274,7 @@ def callback(velodyne, yolo, image, cone_pub=None):
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
-            if isInside(box['upper_point'][0], box['upper_point'][1], box['left_down_point'][0], box['left_down_point'][1], box['right_down_point'][0], box['right_down_point'][1], xy[0], xy[1]):
+            if isInside(box['left_down_point'][0], box['left_down_point'][1], box['upper_point'][0], box['upper_point'][1], box['right_down_point'][0], box['right_down_point'][1], xy[0], xy[1]):
                 xyz_list = mat_xyz_p[k].tolist()
                 inner_3d_point.append(xyz_list)
         dist, position = calc_distance_position1(inner_3d_point)

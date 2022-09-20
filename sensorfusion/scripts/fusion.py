@@ -161,45 +161,13 @@ def calc_distance_position1(points):
 def calc_distance_position2(poinst):
     pass
 
-# A utility function to calculate area
-# of triangle formed by (x1, y1),
-# (x2, y2) and (x3, y3)
- 
-def area(x1, y1, x2, y2, x3, y3):
-    return abs((x1 * (y2 - y3) + x2 * (y3 - y1)
-                + x3 * (y1 - y2)) / 2.0)
- 
- 
-# A function to check whether point P(x, y)
-# lies inside the triangle formed by
-# A(x1, y1), B(x2, y2) and C(x3, y3)
-def isInside(x1, y1, x2, y2, x3, y3, x, y):
- 
-    # Calculate area of triangle ABC
-    A = area (x1, y1, x2, y2, x3, y3)
- 
-    # Calculate area of triangle PBC
-    A1 = area (x, y, x2, y2, x3, y3)
-     
-    # Calculate area of triangle PAC
-    A2 = area (x1, y1, x, y, x3, y3)
-     
-    # Calculate area of triangle PAB
-    A3 = area (x1, y1, x2, y2, x, y)
-     
-    # Check if sum of A1, A2 and A3
-    # is same as A
-    if(A == A1 + A2 + A3):
-        return True
-    else:
-        return False
-
 
 # all topics are processed in this callback function
-def callback(velodyne, yolo, image, cone_pub=None):
+def callback(velodyne, yolo, image, pcd_pub=None):
     global CAMERA_MODEL, TF_BUFFER, TF_LISTENER
 
     rospy.loginfo('Fusion Processing')
+    # rospy.loginfo('Setting up camera model')
     # CAMERA_MODEL.fromCameraInfo(camera_info)
     
     # TF listener
@@ -234,11 +202,8 @@ def callback(velodyne, yolo, image, cone_pub=None):
         right_x = center_x + (detection.bbox.size_x / 2.0)
         right_y = center_y + (detection.bbox.size_y / 2.0)
         bbox_dict = {'center_point':[center_x, center_y],
-                        'left_up_point':[left_x, left_y],
-                        'left_down_point':[left_x, right_y],
-                        'right_down_point':[right_x, right_y],
-                        'right_up_point':[right_x, left_y],
-                        'upper_point':[center_x, left_y],
+                        'left_point':[left_x, left_y],
+                        'right_point':[right_x, right_y],
                         'id':detection.results[0].id
         }
         box_list.append(bbox_dict)
@@ -251,7 +216,7 @@ def callback(velodyne, yolo, image, cone_pub=None):
     # filtering point cloud in front of camera
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]<0),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]<0),axis=1)
-    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>15),axis=1)
+    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>10),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>10),axis=1)
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1) #Ground Filter
@@ -267,31 +232,35 @@ def callback(velodyne, yolo, image, cone_pub=None):
     # filtering points in bounding boxes & calculate position and distance
     dist_list = []
     position_list = []
-    # pd_list = []
-    pose_list = PoseArray()
-    pose_list.header.stamp = rospy.Time.now()
-    pose_list.header.frame_id = 'map'
+    pcd = PoseArray()
+    pd_list = PoseArray()
+    pcd.header.stamp = rospy.Time.now()
+    pcd.header.frame_id = 'map'
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
-            if isInside(box['left_down_point'][0], box['left_down_point'][1], box['upper_point'][0], box['upper_point'][1], box['right_down_point'][0], box['right_down_point'][1], xy[0], xy[1]):
+            if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]:
                 xyz_list = mat_xyz_p[k].tolist()
                 inner_3d_point.append(xyz_list)
-        dist, position = calc_distance_position1(inner_3d_point)
-        dist_list.append(dist)
-        position_list.append(position)
-        # pd_list.append(position + dist)
+                tmp_pt = Pose()
+                tmp_pt.orientation.x = xyz_list[0]
+                tmp_pt.orientation.y = xyz_list[1]
+                tmp_pt.orientation.z = xyz_list[2]
+                tmp_pt.orientation.w = float(box['id'])
+                pcd.poses.append(tmp_pt)
+        if len(inner_3d_point) != 0:
+            dist, position = calc_distance_position1(inner_3d_point)
+            dist_list.append(dist)
+            position_list.append(position)
         tmp_pd = Pose()
-        for ps in position_list:
-            if len(ps) != 0:
-                tmp_pd.orientation.x = ps[0]
-                tmp_pd.orientation.y = ps[1]
-                tmp_pd.orientation.z = ps[2]
-                tmp_pd.orientation.w = float(box['id'])
-                pose_list.poses.append(tmp_pd)
-    print('distance list: ', dist_list)
-    print('position list: ', position_list)
-    cone_pub.publish(pose_list)
+        tmp_pd.orientation.x = position[0]
+        tmp_pd.orientation.y = position[1]
+        tmp_pd.orientation.z = position[2]
+        tmp_pd.orientation.w = float(box['id'])
+        pd_list.poses.append(tmp_pd)
+    # print('distance list: ', dist_list)
+    # print('position list: ', position_list)
+    pcd_pub.publish(pd_list)
 
     xy_i = xy_i.astype(np.int32)
     projectionImage = draw_pts_img(img, xy_i[0,:], xy_i[1,:])
@@ -306,7 +275,7 @@ def callback(velodyne, yolo, image, cone_pub=None):
 # practical main function
 def listener(image_color, velodyne_points, yolo_bbox):
     # Start node
-    rospy.init_node('fusion_camera_lidar_narrow', anonymous=True)
+    rospy.init_node('fusion_camera_lidar', anonymous=True)
     rospy.loginfo('Current PID: [{}]'.format(os.getpid()))
     rospy.loginfo('PointCloud2 topic: {}'.format(velodyne_points))
     rospy.loginfo('YOLO topic: {}'.format(yolo_bbox))
@@ -318,12 +287,12 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    cone_pub = rospy.Publisher('/cone_info', PoseArray, queue_size=10)
+    pcd_pub = rospy.Publisher('/pcd', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(
         [velodyne_sub, yolo_sub, image_sub], queue_size=10, slop=0.1)
-    ats.registerCallback(callback, cone_pub)
+    ats.registerCallback(callback, pcd_pub)
 
     # Keep python from exiting until this node is stopped
     try:
@@ -334,7 +303,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
 if __name__ == '__main__':
     # YOLO, LiDAR Topic name
     velodyne_points = '/velodyne_points'
-    yolo_bbox = '/cone'
+    yolo_bbox = '/sign_bbox'
     image_color = '/usb_cam/image_raw'
 
     # Start subscriber

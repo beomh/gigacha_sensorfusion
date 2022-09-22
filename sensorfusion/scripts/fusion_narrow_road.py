@@ -202,7 +202,7 @@ def point_in_triangle(p, v1, v2, v3):
 
 # all topics are processed in this callback function
 def callback(velodyne, yolo, image, cone_pub=None):
-    global CAMERA_MODEL, TF_BUFFER, TF_LISTENER
+    global CAMERA_MODEL, TF_BUFFER, TF_LISTENER, IS_VIS
 
     rospy.loginfo('Fusion Processing')
     # CAMERA_MODEL.fromCameraInfo(camera_info)
@@ -283,25 +283,22 @@ def callback(velodyne, yolo, image, cone_pub=None):
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
-            if point_in_triangle([xy[0], xy[1]], [box['left_down_point'][0], box['left_down_point'][1]], [box['upper_point'][0], box['upper_point'][1]], [box['right_down_point'][0], box['right_down_point'][1]]):
-                inner_3d_point.append(mat_xyz_p[k].tolist())
+            if point_in_triangle([xy[0], xy[1]], [box['left_down_point'][0], box['left_down_point'][1]], [box['upper_point'][0], box['upper_point'][1]], [box['right_down_point'][0], box['right_down_point'][1]]): inner_3d_point.append(mat_xyz_p[k].tolist())
         if len(inner_3d_point) != 0:
             dist, position = calc_distance_position2(inner_3d_point)
             dist_list.append(dist)
             position_list.append(position)
-        # print(i, box)
-        # print('triangle: ')
-        # print('upper: ', box['upper_point'], 'left_down: ', box['left_down_point'], 'right_down: ', box['right_down_point'])
-        # print(np.array(inner_3d_point))
-        # print('========================')
-        tmp_pd = Pose()
-        for ps in position_list:
-            if len(ps) != 0:
-                tmp_pd.orientation.x = ps[0]
-                tmp_pd.orientation.y = ps[1]
-                tmp_pd.orientation.z = ps[2]
-                tmp_pd.orientation.w = float(box['id'])
-                pose_list.poses.append(tmp_pd)
+            tmp_pd = Pose()
+            # print(i, box)
+            # print('triangle: ')
+            # print('upper: ', box['upper_point'], 'left_down: ', box['left_down_point'], 'right_down: ', box['right_down_point'])
+            # print(np.array(inner_3d_point))
+            # print('========================')
+            tmp_pd.orientation.x = position[0]
+            tmp_pd.orientation.y = position[1]
+            tmp_pd.orientation.z = position[2]
+            tmp_pd.orientation.w = float(box['id'])
+            pose_list.poses.append(tmp_pd)
     print('distance list: ', dist_list)
     print('position list: ', np.array(position_list))
     cone_pub.publish(pose_list)

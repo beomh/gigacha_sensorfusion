@@ -164,7 +164,7 @@ def calc_distance_position2(poinst):
 
 # all topics are processed in this callback function
 def callback(velodyne, yolo, image, pcd_pub=None):
-    global CAMERA_MODEL, TF_BUFFER, TF_LISTENER
+    global CAMERA_MODEL, TF_BUFFER, TF_LISTENER, IS_VIS
 
     rospy.loginfo('Fusion Processing')
     # rospy.loginfo('Setting up camera model')
@@ -232,32 +232,23 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     # filtering points in bounding boxes & calculate position and distance
     dist_list = []
     position_list = []
-    pcd = PoseArray()
     pd_list = PoseArray()
-    pcd.header.stamp = rospy.Time.now()
-    pcd.header.frame_id = 'map'
+    pd_list.header.stamp = rospy.Time.now()
+    pd_list.header.frame_id = 'map'
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
-            if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]:
-                xyz_list = mat_xyz_p[k].tolist()
-                inner_3d_point.append(xyz_list)
-                tmp_pt = Pose()
-                tmp_pt.orientation.x = xyz_list[0]
-                tmp_pt.orientation.y = xyz_list[1]
-                tmp_pt.orientation.z = xyz_list[2]
-                tmp_pt.orientation.w = float(box['id'])
-                pcd.poses.append(tmp_pt)
+            if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]: inner_3d_point.append(mat_xyz_p[k].tolist())
         if len(inner_3d_point) != 0:
             dist, position = calc_distance_position1(inner_3d_point)
             dist_list.append(dist)
             position_list.append(position)
-        tmp_pd = Pose()
-        tmp_pd.orientation.x = position[0]
-        tmp_pd.orientation.y = position[1]
-        tmp_pd.orientation.z = position[2]
-        tmp_pd.orientation.w = float(box['id'])
-        pd_list.poses.append(tmp_pd)
+            tmp_pd = Pose()
+            tmp_pd.orientation.x = position[0]
+            tmp_pd.orientation.y = position[1]
+            tmp_pd.orientation.z = position[2]
+            tmp_pd.orientation.w = float(box['id'])
+            pd_list.poses.append(tmp_pd)
     # print('distance list: ', dist_list)
     # print('position list: ', position_list)
     pcd_pub.publish(pd_list)

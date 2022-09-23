@@ -41,8 +41,8 @@ params_cam = {
     "WIDTH": 640, # image width
     "HEIGHT": 480, # image height
     "FOV": 60, # Field of view
-    "X": 0.0, # meter
-    "Y": 0.0,
+    "X": -0.26, # meter
+    "Y": 0.155,
     "Z": 0.0,
     "YAW": 0.0, # deg
     "PITCH": 0.0,
@@ -316,7 +316,7 @@ def callback(velodyne, yolo, image, cone_pub=None):
 # practical main function
 def listener(image_color, velodyne_points, yolo_bbox):
     # Start node
-    rospy.init_node('fusion_camera_lidar_narrow', anonymous=True)
+    rospy.init_node('fusion_camera_lidar_narrow_blue', anonymous=True)
     rospy.loginfo('Current PID: [{}]'.format(os.getpid()))
     rospy.loginfo('PointCloud2 topic: {}'.format(velodyne_points))
     rospy.loginfo('YOLO topic: {}'.format(yolo_bbox))
@@ -344,8 +344,8 @@ def listener(image_color, velodyne_points, yolo_bbox):
 if __name__ == '__main__':
     # YOLO, LiDAR Topic name
     velodyne_points = '/velodyne_points'
-    yolo_bbox = '/yellow_bbox'
-    image_color = '/usb_cam/image_raw'
+    yolo_bbox = '/blue_bbox'
+    image_color = '/usb_cam/image_raw_blue'
 
     # Start subscriber
     listener(image_color, velodyne_points, yolo_bbox)

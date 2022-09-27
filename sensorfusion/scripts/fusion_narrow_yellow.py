@@ -41,9 +41,9 @@ params_cam = {
     "WIDTH": 640, # image width
     "HEIGHT": 480, # image height
     "FOV": 60, # Field of view
-    "X": -0.26, # meter
-    "Y": -0.155,
-    "Z": 0.0,
+    "X": 0.78, # meter
+    "Y": -0.55,
+    "Z": -0.4,
     "YAW": 0.0, # deg
     "PITCH": 0.0,
     "ROLL": 0.0
@@ -204,7 +204,8 @@ def point_in_triangle(p, v1, v2, v3):
 def callback(velodyne, yolo, image, cone_pub=None):
     global CAMERA_MODEL, TF_BUFFER, TF_LISTENER, IS_VIS
 
-    rospy.loginfo('Fusion Processing')
+    # rospy.loginfo('Fusion Processing')
+    print   ("==========================")
     # CAMERA_MODEL.fromCameraInfo(camera_info)
     
     # TF listener
@@ -256,8 +257,8 @@ def callback(velodyne, yolo, image, cone_pub=None):
     # filtering point cloud in front of camera
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]<0),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]<0),axis=1)
-    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>10),axis=1)
-    xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>10),axis=1)
+    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>7),axis=1)
+    xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>7),axis=1)
     # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]>5),axis=1)
     # xyz_p = np.delete(xyz_p,np.where(xyz_p[1,:]>5),axis=1)
     # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]<-5),axis=1)
@@ -328,7 +329,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    cone_pub = rospy.Publisher('/cone_info', PoseArray, queue_size=10)
+    cone_pub = rospy.Publisher('/cone_yellow', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(

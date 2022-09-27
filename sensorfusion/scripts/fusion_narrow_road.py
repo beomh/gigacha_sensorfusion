@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- coding: utf-8 -*-
+#-*-coding:utf-8-*-
 
 # Python 2/3 compatibility
 from __future__ import print_function
@@ -41,9 +41,9 @@ params_cam = {
     "WIDTH": 640, # image width
     "HEIGHT": 480, # image height
     "FOV": 60, # Field of view
-    "X": 0.145, # meter
-    "Y": 0,
-    "Z": 0.3,
+    "X": 0.0, # meter
+    "Y": 0.0,
+    "Z": 0.0,
     "YAW": 0.0, # deg
     "PITCH": 0.0,
     "ROLL": 0.0
@@ -151,23 +151,60 @@ def calc_distance_position1(points):
     mat_points = np.array(points).T
     position = []
     for coordinate in mat_points:
-        avg = sum(coordinate)/len(coordinate)
+        avg = round(sum(coordinate)/len(coordinate), 5)
         position.append(avg)
     tmp_position = np.array(position)
-    dist = math.sqrt(tmp_position.dot(tmp_position))
+    dist = round(math.sqrt(tmp_position.dot(tmp_position)), 5)
     return dist, position
 
-# mid point method
-def calc_distance_position2(poinst):
-    pass
+# sort point method
+def calc_distance_position2(points):
+    sorted_points = points
+    sorted_points.sort(key=lambda x : x[0])
+    default_data = sorted_points[0][0]
+    trust_points = []
+    position = []
+    for i, point in enumerate(sorted_points):
+        if math.floor(point[0]) == math.floor(default_data):
+            trust_points.append(point)
+        else:
+            break
+    mat_trust_points = np.array(trust_points).T
+    # print(mat_trust_points)
+    for coordinate in mat_trust_points:
+        avg = round(sum(coordinate)/len(coordinate), 5)
+        position.append(avg)
+    tmp_position = np.array(position)
+    dist = round(math.sqrt(tmp_position.dot(tmp_position)), 5)
+    return dist, position
+
+def point_in_triangle(p, v1, v2, v3):
+    """Checks whether a point is within the given triangle
+
+    The function checks, whether the given point p is within the triangle defined by the the three corner point v1,
+    v2 and v3.
+    This is done by checking whether the point is on all three half-planes defined by the three edges of the triangle.
+    :param p: The point to be checked (tuple with x any y coordinate)
+    :param v1: First vertex of the triangle (tuple with x any y coordinate)
+    :param v2: Second vertex of the triangle (tuple with x any y coordinate)
+    :param v3: Third vertex of the triangle (tuple with x any y coordinate)
+    :return: True if the point is within the triangle, False if not
+    """
+    def _test(p1, p2, p3):
+        return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+
+    b1 = _test(p, v1, v2) < 0.0
+    b2 = _test(p, v2, v3) < 0.0
+    b3 = _test(p, v3, v1) < 0.0
+
+    return (b1 == b2) and (b2 == b3) 
 
 
 # all topics are processed in this callback function
-def callback(velodyne, yolo, image, pcd_pub=None):
+def callback(velodyne, yolo, image, cone_pub=None):
     global CAMERA_MODEL, TF_BUFFER, TF_LISTENER, IS_VIS
 
     rospy.loginfo('Fusion Processing')
-    # rospy.loginfo('Setting up camera model')
     # CAMERA_MODEL.fromCameraInfo(camera_info)
     
     # TF listener
@@ -202,8 +239,11 @@ def callback(velodyne, yolo, image, pcd_pub=None):
         right_x = center_x + (detection.bbox.size_x / 2.0)
         right_y = center_y + (detection.bbox.size_y / 2.0)
         bbox_dict = {'center_point':[center_x, center_y],
-                        'left_point':[left_x, left_y],
-                        'right_point':[right_x, right_y],
+                        'left_up_point':[left_x, left_y],
+                        'left_down_point':[left_x, right_y],
+                        'right_down_point':[right_x, right_y],
+                        'right_up_point':[right_x, left_y],
+                        'upper_point':[center_x, left_y],
                         'id':detection.results[0].id
         }
         box_list.append(bbox_dict)
@@ -218,6 +258,10 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]<0),axis=1)
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>10),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>10),axis=1)
+    # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]>5),axis=1)
+    # xyz_p = np.delete(xyz_p,np.where(xyz_p[1,:]>5),axis=1)
+    # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]<-5),axis=1)
+    # xyz_p = np.delete(xyz_p,np.where(xyz_p[1,:]<-5),axis=1)
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[2,:]<-0.7),axis=1) #Ground Filter
 
@@ -232,26 +276,32 @@ def callback(velodyne, yolo, image, pcd_pub=None):
     # filtering points in bounding boxes & calculate position and distance
     dist_list = []
     position_list = []
-    pd_list = PoseArray()
-    pd_list.header.stamp = rospy.Time.now()
-    pd_list.header.frame_id = 'map'
+    # pd_list = []
+    pose_list = PoseArray()
+    pose_list.header.stamp = rospy.Time.now()
+    pose_list.header.frame_id = 'map'
     for i, box in enumerate(box_list):
         inner_3d_point = []
         for k, xy in enumerate(mat_xy_i):
-            if xy[0] > box['left_point'][0] and xy[0] < box['right_point'][0] and xy[1] > box['left_point'][1] and xy[1] < box['right_point'][1]: inner_3d_point.append(mat_xyz_p[k].tolist())
+            if point_in_triangle([xy[0], xy[1]], [box['left_down_point'][0], box['left_down_point'][1]], [box['upper_point'][0], box['upper_point'][1]], [box['right_down_point'][0], box['right_down_point'][1]]): inner_3d_point.append(mat_xyz_p[k].tolist())
         if len(inner_3d_point) != 0:
-            dist, position = calc_distance_position1(inner_3d_point)
+            dist, position = calc_distance_position2(inner_3d_point)
             dist_list.append(dist)
             position_list.append(position)
             tmp_pd = Pose()
+            # print(i, box)
+            # print('triangle: ')
+            # print('upper: ', box['upper_point'], 'left_down: ', box['left_down_point'], 'right_down: ', box['right_down_point'])
+            # print(np.array(inner_3d_point))
+            # print('========================')
             tmp_pd.orientation.x = position[0]
             tmp_pd.orientation.y = position[1]
             tmp_pd.orientation.z = position[2]
             tmp_pd.orientation.w = float(box['id'])
-            pd_list.poses.append(tmp_pd)
+            pose_list.poses.append(tmp_pd)
     print('distance list: ', dist_list)
-    print('position list: ', position_list)
-    pcd_pub.publish(pd_list)
+    print('position list: ', np.array(position_list))
+    cone_pub.publish(pose_list)
 
     xy_i = xy_i.astype(np.int32)
     projectionImage = draw_pts_img(img, xy_i[0,:], xy_i[1,:])
@@ -266,7 +316,7 @@ def callback(velodyne, yolo, image, pcd_pub=None):
 # practical main function
 def listener(image_color, velodyne_points, yolo_bbox):
     # Start node
-    rospy.init_node('fusion_camera_lidar', anonymous=True)
+    rospy.init_node('fusion_camera_lidar_narrow', anonymous=True)
     rospy.loginfo('Current PID: [{}]'.format(os.getpid()))
     rospy.loginfo('PointCloud2 topic: {}'.format(velodyne_points))
     rospy.loginfo('YOLO topic: {}'.format(yolo_bbox))
@@ -278,12 +328,12 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    pcd_pub = rospy.Publisher('/pcd', PoseArray, queue_size=10)
+    cone_pub = rospy.Publisher('/cone_info', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(
         [velodyne_sub, yolo_sub, image_sub], queue_size=10, slop=0.1)
-    ats.registerCallback(callback, pcd_pub)
+    ats.registerCallback(callback, cone_pub)
 
     # Keep python from exiting until this node is stopped
     try:
@@ -294,7 +344,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
 if __name__ == '__main__':
     # YOLO, LiDAR Topic name
     velodyne_points = '/velodyne_points'
-    yolo_bbox = '/sign_bbox'
+    yolo_bbox = '/yellow_bbox'
     image_color = '/usb_cam/image_raw'
 
     # Start subscriber

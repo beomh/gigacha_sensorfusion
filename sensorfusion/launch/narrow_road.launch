@@ -1,0 +1,6 @@
+<launch>
+    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch"></include>
+    <include file="$(find lidar3d_od)/launch/obstacledetector.launch"></include>
+    <node name="fusion_camera_lidar_narrow_yellow" pkg="sensorfusion" type="fusion_narrow_yellow.py"></node>
+    <node name="fusion_camera_lidar_narrow_blue" pkg="sensorfusion" type="fusion_narrow_blue.py"></node>
+</launch>

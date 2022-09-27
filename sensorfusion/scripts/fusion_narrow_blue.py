@@ -41,9 +41,9 @@ params_cam = {
     "WIDTH": 640, # image width
     "HEIGHT": 480, # image height
     "FOV": 60, # Field of view
-    "X": -0.26, # meter
-    "Y": 0.155,
-    "Z": 0.0,
+    "X": 0.14, # meter
+    "Y": 0.07,
+    "Z": 0.14,
     "YAW": 0.0, # deg
     "PITCH": 0.0,
     "ROLL": 0.0
@@ -256,8 +256,8 @@ def callback(velodyne, yolo, image, cone_pub=None):
     # filtering point cloud in front of camera
     filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]<0),axis=1)
     xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]<0),axis=1)
-    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>10),axis=1)
-    xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>10),axis=1)
+    filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[0,:]>7),axis=1)
+    xyz_p = np.delete(xyz_p,np.where(xyz_p[0,:]>7),axis=1)
     # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]>5),axis=1)
     # xyz_p = np.delete(xyz_p,np.where(xyz_p[1,:]>5),axis=1)
     # filtered_xyz_p = np.delete(filtered_xyz_p,np.where(xyz_p[1,:]<-5),axis=1)
@@ -328,7 +328,7 @@ def listener(image_color, velodyne_points, yolo_bbox):
     image_sub = message_filters.Subscriber(image_color, Image)
 
     # Publish output topic
-    cone_pub = rospy.Publisher('/cone_info', PoseArray, queue_size=10)
+    cone_pub = rospy.Publisher('cone_blue', PoseArray, queue_size=10)
 
     # Synchronize the topic by time: velodyne, yolo, image
     ats = message_filters.ApproximateTimeSynchronizer(
